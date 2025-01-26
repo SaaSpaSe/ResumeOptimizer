@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pylint
+loguru
+celery
+redis
+pytest
+httpx
