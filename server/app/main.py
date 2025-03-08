@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from pydantic import BaseModel
 import fitz
 import re
+from .llm import query_llm_to_generate_resume_without_JD, query_llm_to_generate_resume_with_JD 
 
 class Resume(BaseModel):
     name: str
@@ -21,69 +22,36 @@ def parse_resume(file):
     for page_num in range(pdf_document.page_count):
         page = pdf_document.load_page(page_num)
         text += page.get_text()
-
-    # Extract name
-    name_match = re.search(r"Name:\s*(.*)", text)
-    name = name_match.group(1) if name_match else "John Doe"
-
-    # Extract email
-    email_match = re.search(r"Email:\s*([\w\.-]+@[\w\.-]+)", text)
-    email = email_match.group(1) if email_match else ""
-
-    # Extract phone number
-    phone_match = re.search(r"Phone:\s*(\d{10})", text)
-    phone = phone_match.group(1) if phone_match else "1234567890"
-
-    # Extract experience
-    experience_match = re.search(r"Experience\s*(\d+)", text)
-    experience = int(experience_match.group(1)) if experience_match else 5
-
-    # Extract skills
-    skills_match = re.search(r"Skills\s*(.*)", text)
-    skills = skills_match.group(1).split(", ") if skills_match else ["Python", "Java", "C++"]
-
-    # Extract education
-    education_match = re.search(r"Education\s*(.*)", text)
-    education = education_match.group(1).split(", ") if education_match else ["B.Tech", "M.Tech"]
-
-    # Extract projects
-    projects_match = re.search(r"Projects\s*(.*)", text)
-    projects = projects_match.group(1).split(", ") if projects_match else ["Project 1", "Project 2"]
-
-    resume = Resume(
-        name=name,
-        email=email,
-        phone=phone,
-        experience=experience,
-        skills=skills,
-        education=education,
-        projects=projects
-    )
     
-    return [resume, text]
+    return text
 
 @app.get("/")
 async def root():
     return {"message": "This is the root of the Resume optimizer API"}
 
 @app.post("/upload")
-async def upload_resume(file: UploadFile = File(...)):
+async def upload_resume(file: UploadFile = File(...), job_description: str = None):
     file_name = file.filename
     content_type = file.content_type
     file_extension = file.filename.split(".")[-1]
 
     # create file as a object without saving it
-
     file_object = file.file.read()
-    print(file_object)
+    # print(file_object)
     #  parse file contents and extract information from it and store it in resume object
-    [resume, text] = parse_resume(file_object)
-    print(resume, text)
-    
+    resume_text = parse_resume(file_object)
+    print(resume_text)
+
+    # call ollama service
+    if job_description:
+        ollama_response = await query_llm_to_generate_resume_with_JD(job_description, resume_text)
+    else:   
+        ollama_response = await query_llm_to_generate_resume_without_JD(resume_text)
+    print(ollama_response)
 
     return {"message": "Resume uploaded successfully", 
             "file name": file_name, 
             "file type": content_type,
             "file_extension": file_extension,
-            "resume": resume.dict(),
+            "ollama_response": ollama_response
             }
